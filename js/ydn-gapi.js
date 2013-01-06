@@ -20,9 +20,42 @@ ydn.gapi.Client = function(service_format) {
   /**
    * Copy properties from schema to class prototype properties.
    */
-  var copySchema = function(clazz, schema) {
-    clazz.prototype.name = schema.id;
-    clazz.prototype.kind = schema.properties.kind.default;
+  var copySchema = function(model, schema, resource) {
+    model.prototype.name = schema.id;
+    model.prototype.kind = schema.properties.kind.default;
+
+    /**
+     * Return REST request arguments object for given method.
+     * @param {string} method
+     * @return {{}}
+     */
+    model.prototype.getParameters = function(method) {
+      var parameters = resource.methods[method].parameters;
+      var out = {};
+      for (var param in parameters) {
+        var value = this.get(param);
+        if (!(value != null) && parameters[param].location == 'path') {
+          var path = this.get('selfLink'); // always refer to selfLink ?
+          if (path) {
+            var s = resource.methods[method].path.replace('{' + param + '}', '(\\w+)');
+            s = s.replace(/{\w+}/, '\\w+');
+            var reg = new RegExp(s);
+            var m = path.match(reg);
+            if (m) {
+              value = m[1];
+            }
+          }
+        }
+        if (value != null) { // Note that undefined == null.
+          if (parameters[param].type == "string") {
+            out[param] = value + '';
+          } else {
+            out[param] = value;
+          }
+        }
+      }
+      return out;
+    }
   };
 
   /**
@@ -55,7 +88,7 @@ ydn.gapi.Client = function(service_format) {
         }
     );
 
-    copySchema(Entry, entry_schema);
+    copySchema(Entry, entry_schema, resource);
 
     Feed = Backbone.Collection.extend({
       model: Entry,
@@ -65,9 +98,6 @@ ydn.gapi.Client = function(service_format) {
       storeName: function() {
         return this.name + ':' + this.data.id;
       },
-      getParameters: function() {
-
-      },
       /**
        *
        * @param {string} method
@@ -76,7 +106,7 @@ ydn.gapi.Client = function(service_format) {
        */
       sync: function (method, model, options) {
         if (method == 'read') {
-          Feed.client.get(model);
+          Feed.client.get(model.getParameters('get'));
           var req = {
             path: model.url(),
             method: 'GET'
@@ -94,7 +124,7 @@ ydn.gapi.Client = function(service_format) {
       }
     });
 
-    copySchema(Feed, schema);
+    copySchema(Feed, schema, resource);
     Feed.Entry = Entry;
 
     var client_name = schema.id.toLowerCase();

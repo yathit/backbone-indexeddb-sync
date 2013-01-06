@@ -8,7 +8,7 @@
 
 
 
-tasksService = new ydn.gapi.Client(tasks_api_format);
+tasksService = new ydn.gapi.Client(api_format.tasks);
 
 var schema = {
   stores: [
@@ -43,7 +43,11 @@ runApp = function() {
       };
       tasksService.Tasks.client.list(function(tasks) {
         console.log(tasks);
-
+        for (var j = 0; j < tasks.length; j++) {
+          var task = tasks[j];
+          var view = new FeedView({model: task, id: task.id});
+          ele.appendChild(view.render().el);
+        }
       }, arg);
     }
   });

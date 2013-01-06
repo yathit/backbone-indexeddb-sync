@@ -4,8 +4,9 @@
  * @link https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest
  */
 
+var api_format = {};
 
-var tasks_api_format = {
+api_format.tasks = {
   "kind": "discovery#restDescription",
   "etag": "\"zZ6SZIrxjkCWan0Pp0n2ulHSaJk/-FRO-hzZfDWPF3fu3VkP7b9BOUQ\"",
   "discoveryVersion": "v1",
