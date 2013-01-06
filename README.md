@@ -1,4 +1,16 @@
-backbone-indexeddb-sync
-=======================
+Javascript library for client database synchronizing with REST resources
 
-Backbone.sync adaptor for Indexeddb
+Goal
+====
+
+Simple and generalize efficient synchronization between client database
+synchronizing with REST resources.
+
+
+Dependency
+==========
+
+* JQuery
+* Backbone
+* YDN-DB
+

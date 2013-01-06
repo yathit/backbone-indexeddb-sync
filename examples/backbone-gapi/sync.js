@@ -8,7 +8,7 @@
 
 
 
-tasksService = new ydn.gapi.Client(api_format.tasks);
+tasksService = new ydn.gapi.BackboneClient(api_format.tasks);
 
 var schema = {
   stores: [
@@ -25,7 +25,7 @@ var schema = {
 $.db = new ydn.db.Storage('backbone-sync-1', schema);
 
 
-var taskLists;
+var taskLists, tasks;
 /**
  *
  */
@@ -41,7 +41,8 @@ runApp = function() {
       var arg = {
         tasklist: lists.get('id')
       };
-      tasksService.Tasks.client.list(function(tasks) {
+      tasksService.Tasks.client.list(function(result) {
+        tasks = result;
         console.log(tasks);
         for (var j = 0; j < tasks.length; j++) {
           var task = tasks[j];
