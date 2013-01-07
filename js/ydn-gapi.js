@@ -69,6 +69,9 @@ ydn.gapi.BackboneClient = function(service_format) {
       var parameters = resource.methods[method].parameters;
       var out = {};
       for (var param in parameters) {
+        if (resource.methods[method].parameterOrder.indexOf(param) >= 0) {
+          continue;
+        }
         var value = this.getParam(param);
         if (value != null) { // Note that undefined == null.
           if (parameters[param].type == "string") {
@@ -89,9 +92,14 @@ ydn.gapi.BackboneClient = function(service_format) {
       return this.get('selfLink');
     };
 
+    /**
+     * Return path in REST request arguments.
+     * @return {string}
+     */
     clazz.prototype.getPath = function() {
-      return schema.path
-    }
+      var re = new RegExp(resource.methods.get.path.replace(/{\w+}/g, '\\w+'));
+      return service_format.basePath + this.url().match(re)[0];
+    };
 
     /**
      * Backbone.sync override.
@@ -103,19 +111,59 @@ ydn.gapi.BackboneClient = function(service_format) {
       if (method == 'read') {
         var params = model.getReqParams('get');
         var args = {
-          path: this.url(),
+          path: this.getPath(),
           method: 'GET',
           params: params,
-          headers: 'If-None-Match : ' + this.get('etag')
+          headers: {'If-None-Match': this.get('etag')}
         };
         if (client.logLevel <= 400) {
           console.log('sending request ' + JSON.stringify(args));
         }
         args.callback = function (result) {
-          console.log(result);
-//          if (result.items.length > 0) {
-//            $.db.put(this.name, result.items);
-//          }
+          if (client.logLevel <= 400) {
+            var msg = result ? '' : '. No change in server.';
+            console.log('receiving request ' + JSON.stringify(result) + msg);
+          }
+          if (result) {
+            $.db.put(model.name, result).then(function(id) {
+              if (client.logLevel <= 400) {
+                console.log(model.name + ' ' + id + ' saved.');
+              }
+            }, function(e) {
+              throw e;
+            });
+          }
+          options.success(result);
+        };
+
+        gapi.client.request(args);
+      } else if (method == 'update') {
+        var params = model.getReqParams('update');
+        var json = model.toJSON();
+        var args = {
+          path: this.getPath(),
+          method: 'PUT',
+          params: params,
+          body:  JSON.stringify(json),
+          headers: {'If-Match': this.get('etag')}
+        };
+        if (client.logLevel <= 400) {
+          console.log('sending request ' + JSON.stringify(args));
+        }
+        args.callback = function (result) {
+          if (client.logLevel <= 400) {
+            var msg = result ? '' : '. No change in server.';
+            console.log('receiving request ' + JSON.stringify(result) + msg);
+          }
+          if (result) {
+            $.db.put(model.name, json).then(function(id) {
+              if (client.logLevel <= 400) {
+                console.log(model.name + ' ' + id + ' saved.');
+              }
+            }, function(e) {
+              throw e;
+            });
+          }
           options.success(result);
         };
 
