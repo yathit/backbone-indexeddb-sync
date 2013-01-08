@@ -15,11 +15,21 @@ var schema = {
     {
       name: 'feed',
       keyPath: 'id',
-      type: 'TEXT'
+      type: 'TEXT',
+      indexes: [
+        {
+          keyPath: 'updated',
+          type: 'TEXT'
+        }]
     }, {
       name: 'entry',
       keyPath: 'id',
-      type: 'TEXT'
+      type: 'TEXT',
+      indexes: [
+        {
+          keyPath: 'updated',
+          type: 'TEXT'
+        }]
     }]
 };
 $.db = new ydn.db.Storage('backbone-sync-1', schema);
@@ -38,18 +48,22 @@ runApp = function() {
       var lists = taskLists[i];
       var view = new FeedView({model: lists, id: lists.id});
       ele.appendChild(view.render().el);
-      var arg = {
-        tasklist: lists.get('id')
-      };
-      tasksService.Tasks.client.list(function(result) {
-        tasks = result;
-        console.log(tasks);
-        for (var j = 0; j < tasks.length; j++) {
-          var task = tasks[j];
-          var view = new FeedView({model: task, id: task.id});
-          ele.appendChild(view.render().el);
-        }
-      }, arg);
+      var tasksFeed = new tasksService.Tasks();
+      tasksFeed.id = lists.get('id');
+      tasksFeed.tasklist = tasksFeed.id;
+      tasksFeed.fetch();
+//      var arg = {
+//        tasklist: lists.get('id')
+//      };
+//      tasksService.Tasks.client.list(function(result) {
+//        tasks = result;
+//        console.log(tasks);
+//        for (var j = 0; j < tasks.length; j++) {
+//          var task = tasks[j];
+//          var view = new FeedView({model: task, id: task.id});
+//          ele.appendChild(view.render().el);
+//        }
+//      }, arg);
     }
   });
 

@@ -24,29 +24,10 @@ ydn.gapi.BackboneClient = function(service_format) {
     clazz.prototype.kind = schema.properties.kind.default;
 
     /**
-     * Get parameter value.
-     * The value is also search from the feed URI.
-     * @param {string} param_name
-     * @return {*}
+     * Return gapi js client request arguments array for given method.
+     * @param {string} method
+     * @return {Array}
      */
-    clazz.prototype.getParam = function(param_name) {
-      var value = this.get(param_name);
-      if (!(value != null)) {
-        var path = this.get('selfLink'); // always refer to selfLink ?
-        if (path) {
-          // here 'get' method is use. it is assume that path value is same for all methods.
-          var s = resource.methods.get.path.replace('{' + param_name + '}', '(\\w+)');
-          s = s.replace(/{\w+}/, '\\w+');
-          var reg = new RegExp(s);
-          var m = path.match(reg);
-          if (m) {
-            value = m[1];
-          }
-        }
-      }
-      return value;
-    };
-
     clazz.prototype.getClientParams = function(method) {
       var out = [];
       var parameters = resource.methods[method].parameterOrder;
@@ -56,12 +37,15 @@ ydn.gapi.BackboneClient = function(service_format) {
           var e = new Error(this + ' parameter: ' + parameters[i]);
           e.name = 'NotFoundError';
           throw e;
+        } else {
+          out.push(value);
         }
       }
+      return out;
     };
 
     /**
-     * Return REST request arguments object for given method.
+     * Return REST client request arguments object for given method.
      * @param {string} method
      * @return {{}}
      */
@@ -85,23 +69,6 @@ ydn.gapi.BackboneClient = function(service_format) {
     };
 
     /**
-     * Return feed URI or selfLink.
-     * @return {string}
-     */
-    clazz.prototype.url = function() {
-      return this.get('selfLink');
-    };
-
-    /**
-     * Return path in REST request arguments.
-     * @return {string}
-     */
-    clazz.prototype.getPath = function() {
-      var re = new RegExp(resource.methods.get.path.replace(/{\w+}/g, '\\w+'));
-      return service_format.basePath + this.url().match(re)[0];
-    };
-
-    /**
      * Backbone.sync override.
      * @param {string} method
      * @param {!Backbone.Collection} model
@@ -114,24 +81,27 @@ ydn.gapi.BackboneClient = function(service_format) {
           path: this.getPath(),
           method: 'GET',
           params: params,
-          headers: {'If-None-Match': this.get('etag')}
+          headers: {
+            'If-None-Match': this.get('etag'),
+            'If-Modified-Since': this.get('updated')
+          }
         };
-        if (client.logLevel <= 400) {
+        if (client.logLevel <= 500) {
           console.log('sending request ' + JSON.stringify(args));
         }
         args.callback = function (result) {
-          if (client.logLevel <= 400) {
+          if (client.logLevel <= 500) {
             var msg = result ? '' : '. No change in server.';
-            console.log('receiving request ' + JSON.stringify(result) + msg);
+            console.log('receiving GET request ' + msg);
+            if (client.logLevel <= 300) {
+              console.log(result);
+            }
           }
           if (result) {
-            $.db.put(model.name, result).then(function(id) {
-              if (client.logLevel <= 400) {
-                console.log(model.name + ' ' + id + ' saved.');
-              }
-            }, function(e) {
-              throw e;
-            });
+            if (model instanceof Backbone.Collection) {
+              // update child models.
+              //clazz.client.list(model.getClientParams('list'));
+            }
           }
           options.success(result);
         };
@@ -145,7 +115,9 @@ ydn.gapi.BackboneClient = function(service_format) {
           method: 'PUT',
           params: params,
           body:  JSON.stringify(json),
-          headers: {'If-Match': this.get('etag')}
+          headers: {
+            'If-Match': this.get('etag')
+          }
         };
         if (client.logLevel <= 400) {
           console.log('sending request ' + JSON.stringify(args));
@@ -156,11 +128,14 @@ ydn.gapi.BackboneClient = function(service_format) {
             console.log('receiving request ' + JSON.stringify(result) + msg);
           }
           if (result) {
-            $.db.put(model.name, json).then(function(id) {
+            $.db.put(model.getStoreName(), json).then(function(id) {
               if (client.logLevel <= 400) {
                 console.log(model.name + ' ' + id + ' saved.');
               }
             }, function(e) {
+              if (client.logLevel <= 500) {
+                console.log('Error saving ' + model.name + ' ' + id);
+              }
               throw e;
             });
           }
@@ -169,7 +144,15 @@ ydn.gapi.BackboneClient = function(service_format) {
 
         gapi.client.request(args);
       }
-    }
+    };
+
+    /**
+     * @return {string}
+     */
+    clazz.prototype.toString = function() {
+      return clazz.kind + ':' + this.get('id');
+    };
+
   };
 
   /**
@@ -201,6 +184,11 @@ ydn.gapi.BackboneClient = function(service_format) {
 
     Feed = Backbone.Collection.extend({
       model: Entry,
+      initialize: function(args) {
+        if (client.logLevel <= 300) {
+          console.log('Feed ' + this.name + ' constructed.');
+        }
+      },
       url:  function() {
         return '/' + resource.servicePath + resource.methods.list.path;
       }
@@ -211,12 +199,58 @@ ydn.gapi.BackboneClient = function(service_format) {
 
     prototypeGData(Feed, schema, resource);
 
+
     /**
-     * Return client database store name of this class.
+     * Get parameter value.
+     * The value is also search from the feed URI.
+     * @param {string} param_name
+     * @return {*}
+     */
+    Entry.prototype.getParam = function(param_name) {
+      var value = this.get(param_name);
+      if (!(value != null)) {
+        var path = this.get('selfLink'); // always refer to selfLink ?
+        if (path) {
+          // here 'get' method is use. it is assume that path value is same for all methods.
+          var s = resource.methods.get.path.replace('{' + param_name + '}', '(\\w+)');
+          s = s.replace(/{\w+}/, '\\w+');
+          var reg = new RegExp(s);
+          var m = path.match(reg);
+          if (m) {
+            value = m[1];
+          }
+        }
+      }
+      return value;
+    };
+
+    /**
+     * Get parameter value.
+     * The value is also search from the feed URI.
+     * @param {string} param_name
+     * @return {*}
+     */
+    Feed.prototype.getParam = function(param_name) {
+      return this[param_name];
+    };
+
+
+    /**
+     * Return path in REST request arguments.
      * @return {string}
      */
-    Feed.prototype.getStoreName = function() {
-      return 'feed';
+    Entry.prototype.getPath = function() {
+      var re = new RegExp(resource.methods.get.path.replace(/{\w+}/g, '\\w+'));
+      return service_format.basePath + this.url().match(re)[0];
+    };
+
+    /**
+     * Return path in REST request arguments.
+     * @return {string}
+     */
+    Feed.prototype.getPath = function() {
+      var path = resource.methods.list.path.replace(/{\w+}/, this.id);
+      return service_format.basePath + path;
     };
 
     /**
@@ -227,7 +261,33 @@ ydn.gapi.BackboneClient = function(service_format) {
       return 'entry';
     };
 
+    /**
+     * Return client database store name of this class.
+     * @return {string}
+     */
+    Feed.prototype.getStoreName = function() {
+      return 'feed';
+    };
+
+    /**
+     * Return feed URI or selfLink.
+     * @return {string}
+     */
+    Entry.prototype.url = function() {
+      return this.get('selfLink');
+    };
+
+    /**
+     * Return feed URI or selfLink.
+     * @return {string}
+     */
+    Feed.prototype.url = function() {
+      return this.selfLink;
+    };
+
     Feed.Entry = Entry;
+    Entry.Feed = Feed;
+
 
     var client_name = schema.id.toLowerCase();
 
@@ -255,12 +315,25 @@ ydn.gapi.BackboneClient = function(service_format) {
       // define static method mth
       var createRest = function(mth) {
         return function (callback, args) {
+          if (client.logLevel <= 300) {
+            console.log('Sending request for ' + service_format.name + '.' + client_name +
+              '.' + mth);
+          }
           var request = gapi.client[service_format.name][client_name][mth](args);
           request.execute(function (resp) {
-            console.log(resp);
+            if (client.logLevel <= 300) {
+              console.log('Receiving request for ' + service_format.name + '.' + client_name +
+                '.' + mth);
+              if (client.logLevel <= 100) {
+                console.log(resp);
+              }
+            }
             var cnt = 0;
             var out = [];
             if (resp.items) {
+              if (client.logLevel <= 300) {
+                console.log(resp.items.length + ' ' + resp.items[0].kind + ' received.');
+              }
               for (var i = 0; i < resp.items.length; i++) {
                 var item = resp.items[i];
                 if (item.kind == Feed.prototype.kind) {
@@ -271,6 +344,9 @@ ydn.gapi.BackboneClient = function(service_format) {
               }
             }
             if (resp.result && resp.result.id) {
+              if (client.logLevel <= 300) {
+                console.log('A ' + resp.result.kind + ':' + resp.result.id + ' received.');
+              }
               delete resp.result.items;
               if (resp.result.kind == Feed.prototype.kind) {
                 out = new Feed(out);
@@ -317,9 +393,12 @@ ydn.gapi.BackboneClient = function(service_format) {
 
 /**
  * Logging level.
+ * Change this level as necessary.
+ * Predefined level are: 'ALL' (0) 'FINEST' (300), 'FINER' (ALL), 'FINE' (500),
+ * 'CONFIG' (700), 'INFO' (800), 'WARNING', (900)
  * @type {number}
  */
-ydn.gapi.BackboneClient.prototype.logLevel = 300;
+ydn.gapi.BackboneClient.prototype.logLevel = 0;
 
 
 
