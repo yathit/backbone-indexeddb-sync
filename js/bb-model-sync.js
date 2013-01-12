@@ -11,8 +11,9 @@ CachedModel = Backbone.Model.extend({
 });
 
 /**
- * The name of attribute of model for key.
- * @return {string}
+ * Sub class should override this method to return unique identifier of
+ * the model instance. By default, this take value of 'id' attribute.
+ * @return {string} The key to store in database.
  */
 CachedModel.prototype.getKey = function() {
   return this.get('id');
@@ -21,7 +22,7 @@ CachedModel.prototype.getKey = function() {
 
 /**
  * return etag.
- * @return {string}
+ * @return {string} etag.
  */
 CachedModel.prototype.getEtag = function() {
   return this.get('etag');
@@ -29,6 +30,7 @@ CachedModel.prototype.getEtag = function() {
 
 
 /**
+ * Sub class should override this to return valid store name.
  * @type {string}
  */
 CachedModel.prototype.getStoreName = function() {
