@@ -10,35 +10,30 @@ CachedModel = Backbone.Model.extend({
 
 });
 
-
-/**
- * The name of attribute of model for store name.
- * @const
- * @type {string}
- */
-CachedModel.attStoreName = 'name';
-
 /**
  * The name of attribute of model for key.
- * @const
- * @type {string}
+ * @return {string}
  */
-CachedModel.attKey = 'id';
+CachedModel.prototype.getKey = function() {
+  return this.get('id');
+};
 
 
 /**
- * The name of attribute of model for etag.
- * @const
- * @type {string}
+ * return etag.
+ * @return {string}
  */
-CachedModel.attEtag = 'etag';
+CachedModel.prototype.getEtag = function() {
+  return this.get('etag');
+};
 
 
 /**
- * @final
  * @type {string}
  */
-CachedModel.prototype.name = 'store-name';
+CachedModel.prototype.getStoreName = function() {
+  return this.constructor.name || 'model-store-name';
+};
 
 
 /**
@@ -50,21 +45,18 @@ CachedModel.prototype.inlineKey = false;
 
 
 /**
- * Override Model.sync function for caching in client side database. It is
- * assumed that model data has unique identifier 'id' and class name 'name'
- * attributes. Class name 'name' is assumed as store name and 'id' as key.
- * The attributes can be changed.
+ * Override Model.sync function for caching in client side database.
  * @param {string} method
  * @param {!Object} model
  * @param {Object=} options
  * @override
  */
 CachedModel.prototype.sync = function (method, model, options) {
+  var store_name = model.getStoreName();
+  var key = model.getKey();
+  var etag = model.getEtag();
   if (method == 'read') {
     var df = options ? options : $.Deferred();
-    var store_name = model.get(CachedModel.attStoreName);
-    var key = model.get(CachedModel.attKey);
-    var etag = model.get(CachedModel.attEtag);
     $.db.get(store_name, key).then(function(data) {
       if (data) {
         // cached data available, send this first
@@ -73,7 +65,7 @@ CachedModel.prototype.sync = function (method, model, options) {
         $.ajax({
           url: model.url(),
           method: 'GET',
-          headers: 'If-None-Match: ' + model.get(model.attEtag),
+          headers: 'If-None-Match: ' + etag,
           success: function(data) {
             // if model has changes, update to model and the database.
             if (data) {
@@ -102,7 +94,40 @@ CachedModel.prototype.sync = function (method, model, options) {
     }, function(e) {
       throw e;
     });
+    return df;
+  } else if (method == 'update') {
+    var df = options ? options : $.Deferred();
+    $.ajax({
+      url: model.url(),
+      method: 'PUT',
+      headers: 'If-Match : ' + etag,
+      success: function(data) {
+        df.success(data);
+        $.db.put(store_name, data, model.inlineKey ? undefined : key);
+      },
+      error: function(e) {
+        df.error(e);
+      }
+    });
+    return df;
+  } else if (method == 'create') {
+    var df = Backbone.sync(method, model, options);
+    df.success = function(data) {
+      $.db.add(store_name, data, model.inlineKey ? undefined : key)
+          .fail(function(e) {
+            throw e;
+          });
+    };
+    return df;
+  } else if (method == 'delete') {
+    var df = Backbone.sync(method, model, options);
+    df.success = function(data) {
+      $.db.clear(store_name, data, model.inlineKey ? undefined : key);
+    };
+    return df;
   } else {
-    Backbone.sync(method, model, options);
+    var e = new Error(method);
+    e.name = 'NotSupportedError';
+    throw e;
   }
 };
